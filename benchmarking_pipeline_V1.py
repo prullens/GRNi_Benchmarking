@@ -1,66 +1,102 @@
+# Import python modules.
 import pandas as pd
 import numpy as np
 from sklearn.metrics import roc_auc_score, average_precision_score
 import sys
 
-known_interactions_file = sys.argv[1]
-inference_data_file = sys.argv[2]
-benchmark_type = sys.argv[3]
 
-def known_interactions_TO_df(known_interactions):
-    """Converts a known network file to a dict containing all possible interactions and whether they do "1" or do not "0" interact. Accepted formats: 'TF target value' with value being either '1' of interaction or '0' of no interaction, 'TF target' which assumes that all provided TFs regulate the following target"""
+# Define arguments that can be called from the shell and check if the four required arguments are provided.
+if len(sys.argv) == 5:
+    known_interactions_file = sys.argv[1]
+    input_TFs_file = sys.argv[2]
+    inference_data_file = sys.argv[3]
+    benchmark_type = sys.argv[4]
+else:
+    print('Four arguments required: 1) known_interactions_file.txt, 2) input_TFs_file.txt or N.A., 3) inference_data_file.txt, 4) ROC or precision_recall')
+
+
+# Define a function that converts known validated interactions to all possible interactions.    
+def known_interactions_TO_df(known_interactions, input_TFs):
+    """Converts a known network file to a dict containing all possible interactions and whether they do "1" or do not "0" interact. Accepted formats: 'TF target value' with value being either '1' of interaction or '0' of no interaction, 'TF target' which assumes that all provided TFs regulate the following target. Additioanlly, one may choose to select a .txt file containing specific TFs that need to be assessed. The latter is particularly usefull in case of really large datasets as it then only computes the provided list of TFs and hence increases the speed of the computational pipeline substantially."""
     
+    # Defining variables used in this function.
     TF_list = []
     target_list = []
     interaction_value_list = []
     interaction_dict = {}
-    error1_list = []
+    input_TFs_list = []
     
+    # Optionally, a file that contains a list with TFs that need to be checked can be provided, which is opened here.
+    if input_TFs.endswith('.txt'):
+        infile = open(input_TFs)
+        for line in infile:
+            line = line.strip()
+            input_TFs_list.append(line)
+    else:
+        pass
+    
+    # Known interactions file is opened and checked for whether it is already converted to a complete network or yet only contains the validated TF to target interactions. 
     infile = open(known_interactions)
     for line in infile:
         line = line.strip()
         if 'y_true' in line:
             pass
         else:
-            if '_' in line:
+            if '_' in line:  
                 line = line.split()
-                interaction_dict[line[0]] = line[1]
+                if line[0] in input_TFs_list:
+                    interaction_dict[line[0]] = line[1]
+                elif len(input_TFs_list) == 0:
+                    interaction_dict[line[0]] = line[1]  
             else:
                 line = line.split()
-                TF_list.append(line[0])
-                target_list.append(line[1])
-                if len(line) == 3:
-                    interaction_value_list.append(line[2])
-                else:
-                    interaction_value_list.append('1')
+                if line[0] in input_TFs_list:
+                    TF_list.append(line[0])
+                    target_list.append(line[1])
+                    if len(line) == 3:
+                        interaction_value_list.append(line[2])
+                    else:
+                        interaction_value_list.append('1')
+                elif len(input_TFs_list) == 0:
+                    TF_list.append(line[0])
+                    target_list.append(line[1])
+                    if len(line) == 3:
+                        interaction_value_list.append(line[2])
+                    else:
+                        interaction_value_list.append('1')
 
-    if not error1_list:
-        if '0' in interaction_value_list:
-            for i in range (len(TF_list)):
-                TF = TF_list[i]
-                target = target_list[i]
-                interaction_value = interaction_value_list[i]
-                interaction_dict[TF + '_' + target] = interaction_value 
-        elif '0' not in interaction_value_list:
-            for i in range (len(TF_list)):
-                TF = TF_list[i]
-                target = target_list[i]
-                interaction_value = interaction_value_list[i]
-                interaction_dict[TF + '_' + target] = 1
-                for target_2 in target_list:
-                    if TF + '_' + target_2 not in interaction_dict:
-                        interaction_dict[TF + '_' + target_2] = 0
+   # Checks if known network file is already converted to a complete network by screening for 0's, which implies that the file also contains the not interacting "TF targtes" and thus is converted already. Retrieves a dictionary with 'TF_target':1 or 0. 
+    if '0' in interaction_value_list:
+        for i in range (len(TF_list)):
+            TF = TF_list[i]
+            target = target_list[i]
+            interaction_value = interaction_value_list[i]
+            interaction_dict[TF + '_' + target] = interaction_value 
+    elif '0' not in interaction_value_list:
+        for i in range (len(TF_list)):
+            TF = TF_list[i]
+            target = target_list[i]
+            interaction_value = interaction_value_list[i]
+            interaction_dict[TF + '_' + target] = 1
+            for target_2 in target_list:
+                if TF + '_' + target_2 not in interaction_dict:
+                    interaction_dict[TF + '_' + target_2] = 0
 
-        return interaction_dict
+    return interaction_dict
 
 
-def compute_benchmark(known_interactions, inference_data, benchmark):
+# Define a function that allows for computing the ROC or precision_recall score.
+def compute_benchmark(known_interactions, input_TFs, inference_data, benchmark):
     """Allows for the computation of two benchmarks the ROC and the precision recall with as input a known network dict and the Gene Regulatory Network Inference data in a 'TF target score' format"""
     
-    interaction_dict_known = known_interactions_TO_df(known_interactions)
+    # Define used variables for this function
+    interaction_dict_known = known_interactions_TO_df(known_interactions, input_TFs)
     interaction_dict_data = {}
     df_index_list = []
-
+    y_true_list = []
+    score_list = []
+    
+    # Open a .txt file that contains the data derived from the used inference method in a "TF target score" format and checks whether the inference derived interaction can be found back in the complete known interactions file.
     infile = open(inference_data)
     for line in infile:
         line = line.strip()
@@ -69,23 +105,25 @@ def compute_benchmark(known_interactions, inference_data, benchmark):
         if interaction in interaction_dict_known:
             interaction_dict_data[interaction] = float(line[2])
             df_index_list.append(interaction)
-
+    
+    # Create a dataframe with all the derived interacitons that are also present in the complete known network as the index.
     df = pd.DataFrame(index= df_index_list)
-    y_true_list = []
-    score_list = []
-
+    
+    # Append two lists, one with the y_true value that corresponds to the interaction and the other with the probability score that was derived from the inference method also corresponding to the interactions.
     for interaction in interaction_dict_data:
         y_true_list.append(interaction_dict_known[interaction])
         score_list.append(interaction_dict_data[interaction])
-
+    
+    # Add new columns to the dataframe with the y_true value for the interaction from the complete known network and a probability score for the corresponding interaction that was derived from the inference method.  
     df['y_true'] = y_true_list
     df['score'] = score_list   
 
+    # Allowing to compute two different benchmarking methods which can be defined in the shell. The ROC and precision_recall score.
     if benchmark == 'ROC':
         print(roc_auc_score(df["y_true"], df["score"]))
     elif benchmark == 'precision_recall':
         print(average_precision_score(df["y_true"], df["score"]))
     else:
-        print('Choose either the "ROC" or "precision_recall" benchmark as third argument')
+        print('Choose either the "ROC" or "precision_recall" benchmark as a fourth argument.')
 
-compute_benchmark(known_interactions_file, inference_data_file, benchmark_type)
+compute_benchmark(known_interactions_file, input_TFs_file, inference_data_file, benchmark_type)
