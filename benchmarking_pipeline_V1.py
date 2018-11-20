@@ -7,15 +7,13 @@ import csv
 
 
 # Define arguments that can be called from the shell and check if the four required arguments are provided.
-if len(sys.argv) == 4:
-    known_interactions_file = sys.argv[1]
-    input_TFs_file = sys.argv[2]
-    inference_data_file = sys.argv[3]
-if len(sys.argv) > 4:
-    known_interactions_file = sys.argv[1]
-    input_TFs_file = sys.argv[2]
-    inference_data_file = sys.argv[3:]
 
+known_interactions_file = sys.argv[1]
+input_TFs_file = sys.argv[2]
+if len(sys.argv) == 4:
+    inference_data_file = sys.argv[3]
+elif len(sys.argv) > 4:
+    inference_data_file = sys.argv[3:]
 
 # Define a function that converts known validated interactions to all possible interactions.    
 def known_interactions_TO_df(known_interactions, input_TFs):
