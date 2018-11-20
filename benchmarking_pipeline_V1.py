@@ -1,18 +1,17 @@
 # Import python modules.
 import pandas as pd
 import numpy as np
-from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.metrics import roc_auc_score, average_precision_score, precision_recall_curve
 import sys
 
 
 # Define arguments that can be called from the shell and check if the four required arguments are provided.
-if len(sys.argv) == 5:
+if len(sys.argv) == 4:
     known_interactions_file = sys.argv[1]
     input_TFs_file = sys.argv[2]
     inference_data_file = sys.argv[3]
-    benchmark_type = sys.argv[4]
 else:
-    print('Four arguments required: 1) known_interactions_file.txt, 2) input_TFs_file.txt or N.A., 3) inference_data_file.txt, 4) ROC or precision_recall')
+    print('Three arguments required: 1) known_interactions_file.txt, 2) input_TFs_file.txt or N.A., 3) inference_data_file.txt')
 
 
 # Define a function that converts known validated interactions to all possible interactions.    
@@ -86,7 +85,7 @@ def known_interactions_TO_df(known_interactions, input_TFs):
 
 
 # Define a function that allows for computing the ROC or precision_recall score.
-def compute_benchmark(known_interactions, input_TFs, inference_data, benchmark):
+def compute_benchmark(known_interactions, input_TFs, inference_data):
     """Allows for the computation of two benchmarks the ROC and the precision recall with as input a known network dict and the Gene Regulatory Network Inference data in a 'TF target score' format"""
     
     # Define used variables for this function
@@ -116,14 +115,27 @@ def compute_benchmark(known_interactions, input_TFs, inference_data, benchmark):
     
     # Add new columns to the dataframe with the y_true value for the interaction from the complete known network and a probability score for the corresponding interaction that was derived from the inference method.  
     df['y_true'] = y_true_list
-    df['score'] = score_list   
+    df['score'] = score_list  
 
     # Allowing to compute two different benchmarking methods which can be defined in the shell. The ROC and precision_recall score.
-    if benchmark == 'ROC':
-        print(roc_auc_score(df["y_true"], df["score"]))
-    elif benchmark == 'precision_recall':
-        print(average_precision_score(df["y_true"], df["score"]))
-    else:
-        print('Choose either the "ROC" or "precision_recall" benchmark as a fourth argument.')
+    inference_ID = inference_data.split('.')
+    benchmark_dict = {}
 
-compute_benchmark(known_interactions_file, input_TFs_file, inference_data_file, benchmark_type)
+    # Allowing to compute two different benchmarking methods which can be defined in the shell. The ROC and precision_recall score.
+    benchmark_dict['ROC'] = [roc_auc_score(df["y_true"], df["score"])]
+    benchmark_dict['Prcsn_Rcll'] = [average_precision_score(df["y_true"], df["score"])]
+    
+    precision, recall, _ = precision_recall_curve(df["y_true"], df["score"])
+    fdr = 1 - precision
+    cutoff_index_10 = next(i for i, x in enumerate(fdr) if x <= 0.1)
+    cutoff_index_50 = next(i for i, x in enumerate(fdr) if x <= 0.5)
+    benchmark_dict['Rcll, 10% FDR'] = [recall[cutoff_index_10]]
+    benchmark_dict['Rcll, 50% FDR'] = [recall[cutoff_index_50]]
+    
+    df_benchmark = pd.DataFrame(data= benchmark_dict)
+    df_benchmark['data'] = inference_ID[0]
+    df_benchmark = df_benchmark.set_index('data')
+    print(df_benchmark)
+    
+
+compute_benchmark(known_interactions_file, input_TFs_file, inference_data_file)
