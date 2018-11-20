@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import roc_auc_score, average_precision_score, precision_recall_curve
 import sys
+import csv
 
 
 # Define arguments that can be called from the shell and check if the four required arguments are provided.
@@ -10,8 +11,10 @@ if len(sys.argv) == 4:
     known_interactions_file = sys.argv[1]
     input_TFs_file = sys.argv[2]
     inference_data_file = sys.argv[3]
-else:
-    print('Three arguments required: 1) known_interactions_file.txt, 2) input_TFs_file.txt or N.A., 3) inference_data_file.txt')
+if len(sys.argv) > 4:
+    known_interactions_file = sys.argv[1]
+    input_TFs_file = sys.argv[2]
+    inference_data_file = sys.argv[3:]
 
 
 # Define a function that converts known validated interactions to all possible interactions.    
@@ -135,7 +138,22 @@ def compute_benchmark(known_interactions, input_TFs, inference_data):
     df_benchmark = pd.DataFrame(data= benchmark_dict)
     df_benchmark['data'] = inference_ID[0]
     df_benchmark = df_benchmark.set_index('data')
-    print(df_benchmark)
+    return df_benchmark
     
-
-compute_benchmark(known_interactions_file, input_TFs_file, inference_data_file)
+# One inferecence_data file provided or more?
+if type(inference_data_file) == str:
+    print(compute_benchmark(known_interactions_file, input_TFs_file, inference_data_file))
+elif type(inference_data_file) == list:
+    column_list = []
+    df_local_dict = {}
+    for file in inference_data_file:
+        df_local = compute_benchmark(known_interactions_file, input_TFs_file, file)
+        for column in df_local:
+            if column not in column_list:
+                column_list.append(column)
+        for index, row in df_local.iterrows():
+            df_local_dict[index] = []
+            for value in row:
+                df_local_dict[index].append(value)
+    df = pd.DataFrame(data=df_local_dict, index=column_list).T
+    print(df.sort_values('ROC', ascending=False))    
