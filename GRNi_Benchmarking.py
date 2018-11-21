@@ -3,8 +3,6 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import roc_auc_score, average_precision_score, precision_recall_curve
 import sys
-import csv
-
 
 # Define arguments that can be called from the shell and check if the four required arguments are provided.
 
