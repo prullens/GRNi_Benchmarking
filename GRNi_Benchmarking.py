@@ -5,7 +5,6 @@ from sklearn.metrics import roc_auc_score, average_precision_score, precision_re
 import sys
 
 # Define arguments that can be called from the shell and check if the four required arguments are provided.
-
 known_interactions_file = sys.argv[1]
 input_TFs_file = sys.argv[2]
 if len(sys.argv) == 4:
